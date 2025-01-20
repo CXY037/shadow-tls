@@ -279,7 +279,7 @@ impl ShadowTlsServer {
         res?;
         if !client_hello_pass {
             // if client verify failed, bidirectional copy and return
-            tracing::warn!("ClientHello verify failed, will work as a SNI proxy");
+            tracing::warn!("ClientHello verify failed, will work as a SNI proxy, Client Ip: {addr}");
             copy_bidirectional(in_stream, handshake_stream).await;
             return Ok(());
         }

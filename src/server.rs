@@ -5,7 +5,7 @@ use std::{
     rc::Rc,
     sync::Arc,
 };
-
+use std::net::SocketAddr;
 use anyhow::bail;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use local_sync::oneshot::Sender;
@@ -30,6 +30,7 @@ use crate::{
     },
     WildcardSNI,
 };
+mod config;
 
 /// ShadowTlsServer.
 #[derive(Clone)]
@@ -172,7 +173,7 @@ impl ShadowTlsServer {
                     monoio::spawn(async move {
                         let _ = match server.v3.enabled() {
                             false => server.relay_v2(conn).await,
-                            true => server.relay_v3(conn).await,
+                            true => server.relay_v3(conn, addr).await,
                         };
                         tracing::info!("Relay for {addr} finished");
                     });
@@ -258,7 +259,7 @@ impl ShadowTlsServer {
     }
 
     /// Main relay for V3 protocol.
-    async fn relay_v3(&self, mut in_stream: TcpStream) -> anyhow::Result<()> {
+    async fn relay_v3(&self, mut in_stream: TcpStream, client_ip: SocketAddr) -> anyhow::Result<()> {
         // stage 1.1: read and validate client hello
         let first_client_frame = read_exact_frame(&mut in_stream).await?;
         let (client_hello_pass, sni) = verified_extract_sni(&first_client_frame, &self.password);
@@ -279,11 +280,17 @@ impl ShadowTlsServer {
         res?;
         if !client_hello_pass {
             // if client verify failed, bidirectional copy and return
-            tracing::warn!("ClientHello verify failed, will work as a SNI proxy, Client Ip: {addr}");
+            tracing::warn!("ClientHello verify failed, will work as a SNI proxy, Client ip: {}", client_ip.ip());
             copy_bidirectional(in_stream, handshake_stream).await;
             return Ok(());
         }
-        tracing::debug!("ClientHello verify success");
+        let mut logged_ips = config::LOGGED_IPS.lock().await; // 获取锁
+        {
+            if logged_ips.insert(client_ip.ip()) { // 如果 insert 返回 true，表示之前没有记录过
+                println!("Auth Success: Client ip: {}", client_ip.ip())
+            }
+        }
+        // tracing::debug!("ClientHello verify success");
 
         // stage 1.2: read server hello and extract server random from it
         let first_server_frame = read_exact_frame(&mut handshake_stream).await?;

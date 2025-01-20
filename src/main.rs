@@ -11,7 +11,6 @@ use shadow_tls::{
 };
 
 use serde::Deserialize;
-
 #[derive(Parser, Debug, Deserialize)]
 #[clap(
     author,
@@ -305,7 +304,7 @@ fn main() {
         .with(fmt::layer())
         .with(
             EnvFilter::builder()
-                .with_default_directive(LevelFilter::INFO.into())
+                .with_default_directive(LevelFilter::WARN.into())
                 .from_env_lossy()
                 .add_directive("rustls=off".parse().unwrap()),
         )
